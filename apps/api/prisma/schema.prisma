@@ -1,0 +1,161 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  WAREHOUSE
+  FINANCE
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  STOCK_RESERVED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  APPROVED
+  FAILED
+  REFUNDED
+}
+
+enum PaymentMethod {
+  CREDIT_CARD
+  PIX
+  BOLETO
+}
+
+enum ShipmentStatus {
+  PENDING
+  PROCESSING
+  SHIPPED
+  DELIVERED
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         UserRole @default(CUSTOMER)
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  orders          Order[]
+  productsCreated Product[] @relation("ProductCreatedBy")
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  sku         String   @unique
+  active      Boolean  @default(true)
+  createdById String   @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  createdBy  User        @relation("ProductCreatedBy", fields: [createdById], references: [id])
+  inventory  Inventory?
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+model Inventory {
+  id               String   @id @default(uuid())
+  productId        String   @unique @map("product_id")
+  quantity         Int      @default(0)
+  reservedQuantity Int      @default(0) @map("reserved_quantity")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@map("inventory")
+}
+
+model Order {
+  id             String      @id @default(uuid())
+  customerId     String      @map("customer_id")
+  status         OrderStatus @default(PENDING_PAYMENT)
+  totalAmount    Decimal     @map("total_amount") @db.Decimal(10, 2)
+  shippingStreet String      @map("shipping_street")
+  shippingCity   String      @map("shipping_city")
+  shippingState  String      @map("shipping_state")
+  shippingZip    String      @map("shipping_zip")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  customer User        @relation(fields: [customerId], references: [id])
+  items    OrderItem[]
+  payments Payment[]
+  shipment Shipment?
+
+  @@index([customerId])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String  @map("order_id")
+  productId String  @map("product_id")
+  quantity  Int
+  unitPrice Decimal @map("unit_price") @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Payment {
+  id         String        @id @default(uuid())
+  orderId    String        @map("order_id")
+  amount     Decimal       @db.Decimal(10, 2)
+  status     PaymentStatus @default(PENDING)
+  method     PaymentMethod
+  externalId String?       @map("external_id")
+  paidAt     DateTime?     @map("paid_at")
+  refundedAt DateTime?     @map("refunded_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("payments")
+}
+
+model Shipment {
+  id           String         @id @default(uuid())
+  orderId      String         @unique @map("order_id")
+  trackingCode String?        @map("tracking_code")
+  carrier      String?
+  status       ShipmentStatus @default(PENDING)
+  shippedAt    DateTime?      @map("shipped_at")
+  deliveredAt  DateTime?      @map("delivered_at")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("shipments")
+}

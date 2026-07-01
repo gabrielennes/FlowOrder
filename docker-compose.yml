@@ -1,0 +1,50 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: floworder-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: floworder
+      POSTGRES_PASSWORD: floworder
+      POSTGRES_DB: floworder
+    ports:
+      - '5436:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U floworder -d floworder']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    container_name: floworder-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://floworder:floworder@postgres:5432/floworder?schema=public
+      JWT_SECRET: floworder-docker-secret-change-in-production
+      PORT: 3001
+    ports:
+      - '3001:3001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:3001/api
+    container_name: floworder-web
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    depends_on:
+      - api
+
+volumes:
+  postgres_data:
